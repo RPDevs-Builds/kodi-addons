@@ -73,7 +73,7 @@ def download_file(url: str, dest: Path, dry_run: bool = False) -> bool:
 
     if dry_run:
         print(c(f"  [DRY ] Would download → {dest.name}", "cyan"))
-        return False
+        return True
 
     print(f"  [DOWN] {url}")
     print(f"       → {dest}")
@@ -138,6 +138,59 @@ def get_github_latest_release_asset(repo: str, pattern: str) -> tuple[str, str] 
         return None
 
 
+def get_github_contents_latest_file(repo: str, path: str, pattern: str) -> tuple[str, str] | None:
+    """
+    Fetch directory listing from GitHub API for a repo path and return (download_url, filename)
+    for the latest file matching the pattern.
+    """
+    api_url = f"{GITHUB_API}/repos/{repo}/contents/{path}"
+    regex = re.compile(re.escape(pattern).replace(r"\*", ".*"))
+
+    try:
+        req = urllib.request.Request(
+            api_url,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "RPDevs-KodiSync/1.0",
+            }
+        )
+        gh_token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        if gh_token:
+            req.add_header("Authorization", f"Bearer {gh_token}")
+
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+
+        if not isinstance(data, list):
+            print(c(f"  [FAIL] Expected a list of contents from {api_url}", "red"))
+            return None
+
+        matches = []
+        for item in data:
+            if item.get("type") == "file" and regex.match(item.get("name", "")):
+                matches.append(item)
+
+        if not matches:
+            print(c(f"  [WARN] No files matching '{pattern}' in {repo}/{path}", "yellow"))
+            return None
+
+        # Sort matches by filename using natural sorting
+        def version_key(item):
+            filename = item["name"]
+            return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', filename)]
+
+        matches.sort(key=version_key)
+        latest_item = matches[-1]
+        return latest_item["download_url"], latest_item["name"]
+
+    except urllib.error.HTTPError as e:
+        print(c(f"  [FAIL] GitHub API HTTP {e.code} for {repo}/{path}", "red"))
+        return None
+    except Exception as e:
+        print(c(f"  [FAIL] GitHub API error: {e}", "red"))
+        return None
+
+
 # ─── Sync Functions ───────────────────────────────────────────────────────────
 
 def sync_repos(entries: list, dry_run: bool) -> dict:
@@ -147,22 +200,34 @@ def sync_repos(entries: list, dry_run: bool) -> dict:
     for entry in entries:
         name = entry.get("name", "unknown")
         url = entry.get("url", "")
+        source_repo = entry.get("source_repo", "")
+        path = entry.get("github_path", entry.get("path", ""))
+        pattern = entry.get("pattern", entry.get("release_asset_pattern", ""))
         desc = entry.get("description", "")
 
         print(f"\n{c('→ REPO', 'cyan')} {name}")
         if desc:
             print(f"  {desc}")
 
-        if not url:
-            print(c("  [FAIL] No URL specified", "red"))
+        if not url and not (source_repo and path and pattern):
+            print(c("  [FAIL] Missing url OR (source_repo + github_path + pattern)", "red"))
             stats["failed"] += 1
             continue
 
-        # Derive filename from URL
-        filename = url.split("/")[-1]
-        dest = REPOS_DIR / filename
+        if url:
+            filename = url.split("/")[-1]
+            dest = REPOS_DIR / filename
+            dl_url = url
+        else:
+            print(f"  Fetching latest file matching '{pattern}' in {source_repo}/{path}...")
+            result = get_github_contents_latest_file(source_repo, path, pattern)
+            if result is None:
+                stats["failed"] += 1
+                continue
+            dl_url, filename = result
+            dest = REPOS_DIR / filename
 
-        result = download_file(url, dest, dry_run)
+        result = download_file(dl_url, dest, dry_run)
         if result:
             stats["downloaded"] += 1
         elif dest.exists():
@@ -180,7 +245,8 @@ def sync_plugins(entries: list, dry_run: bool) -> dict:
     for entry in entries:
         name = entry.get("name", "unknown")
         source_repo = entry.get("source_repo", "")
-        pattern = entry.get("release_asset_pattern", "")
+        path = entry.get("github_path", entry.get("path", ""))
+        pattern = entry.get("release_asset_pattern", entry.get("pattern", ""))
         desc = entry.get("description", "")
 
         print(f"\n{c('→ PLUGIN', 'cyan')} {name}")
@@ -192,8 +258,12 @@ def sync_plugins(entries: list, dry_run: bool) -> dict:
             stats["failed"] += 1
             continue
 
-        print(f"  Fetching latest release from {source_repo}...")
-        result = get_github_latest_release_asset(source_repo, pattern)
+        if path:
+            print(f"  Fetching latest file matching '{pattern}' in {source_repo}/{path}...")
+            result = get_github_contents_latest_file(source_repo, path, pattern)
+        else:
+            print(f"  Fetching latest release from {source_repo}...")
+            result = get_github_latest_release_asset(source_repo, pattern)
 
         if result is None:
             stats["failed"] += 1
