@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="metadata.anime.otaku.python" name="Otaku Anime Scraper" version="1.0.6" provider-name="YourName">
+    <requires>
+        <import addon="xbmc.python" version="3.0.0"/>
+    </requires>
+    <extension point="xbmc.metadata.scraper.tvshows" library="scraper.py">
+        <provides>tvshows episodes</provides>
+    </extension>
+    <extension point="xbmc.addon.metadata">
+        <summary>Anime Metadata Indexer powered by AniList and Otaku Mappings</summary>
+        <description>A high-performance scraper mapping Eastern Anime databases to native Kodi formats.</description>
+        <platform>all</platform>
+    </extension>
+</addon>

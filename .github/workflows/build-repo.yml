@@ -1,0 +1,115 @@
+name: Build & Publish Kodi Repository
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # Trigger on addon source changes or generator script changes
+      - 'repo/**'
+      - '_repo_generator.py'
+      - '!repo/**/zips/**'  # Don't re-trigger from generated zips
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force rebuild all zips (ignores cache)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    name: Generate Repository
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Force rebuild — clear existing zips
+        if: ${{ github.event.inputs.force == 'true' }}
+        run: |
+          echo "[INFO] Force rebuild — removing cached zips..."
+          rm -rf repo/zips/
+          echo "[INFO] Zips cleared."
+
+      - name: Run Repository Generator
+        run: |
+          echo "[INFO] Running _repo_generator.py..."
+          python3 _repo_generator.py
+          echo "[INFO] Generator complete."
+
+      - name: Copy repository zip to root (Kodi installer)
+        run: |
+          # Find the repo addon zip and copy to root for direct Kodi install
+          REPO_ZIP=$(find repo/zips/repository.rpdevs/ -name "*.zip" | sort -V | tail -1)
+          if [ -n "$REPO_ZIP" ]; then
+            cp "$REPO_ZIP" ./
+            ZIPNAME=$(basename "$REPO_ZIP")
+            echo "REPO_ZIP_NAME=$ZIPNAME" >> $GITHUB_ENV
+            echo "[INFO] Copied $ZIPNAME to root."
+          else
+            echo "[WARN] No repository zip found."
+          fi
+
+      - name: Update index.html installer link
+        run: |
+          if [ -n "$REPO_ZIP_NAME" ]; then
+            cat > index.html << HTML
+          <!DOCTYPE html>
+          <html>
+          <head><title>RPDevs Kodi Repository</title></head>
+          <body>
+            <h1>RPDevs Kodi Add-on Repository</h1>
+            <p>Install in Kodi: Settings → Add-ons → Install from zip file</p>
+            <p><a href="${REPO_ZIP_NAME}">${REPO_ZIP_NAME}</a></p>
+            <p>Or add as file manager source: <code>https://rpdevs-builds.github.io/kodi-addons/</code></p>
+          </body>
+          </html>
+          HTML
+            echo "[INFO] Updated index.html with $REPO_ZIP_NAME."
+          fi
+
+      - name: Commit generated artifacts
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add repo/zips/ index.html repository.rpdevs-*.zip 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "[INFO] No changes to commit."
+          else
+            git commit -m "chore(repo): regenerate addons.xml and zips [skip ci]"
+            git push origin HEAD:main
+            echo "[INFO] Committed and pushed generated artifacts."
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

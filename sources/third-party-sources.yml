@@ -1,0 +1,27 @@
+# RPDevs Third-Party Sources Manifest
+# This file is the source-of-truth for the sync-third-party workflow.
+# Add entries here to have them automatically downloaded and cached.
+
+repos:
+  # Full Kodi repository add-ons — downloaded as installable .zip files
+  - name: repository.jurialmunkey
+    url: https://github.com/jurialmunkey/repository.jurialmunkey/raw/main/repo/zips/repository.jurialmunkey/repository.jurialmunkey-latest.zip
+    description: "jurialmunkey's Kodi repository (TheMovieDB Helper, etc.)"
+
+  # Add more repos here:
+  # - name: repository.example
+  #   url: https://raw.githubusercontent.com/user/repo/main/zips/repository.example/repository.example-1.0.0.zip
+  #   description: "Description of the repo"
+
+plugins:
+  # Individual add-on releases — pulled from GitHub Releases by asset pattern
+  - name: plugin.video.themoviedb.helper
+    source_repo: jurialmunkey/plugin.video.themoviedb.helper
+    release_asset_pattern: "plugin.video.themoviedb.helper-*.zip"
+    description: "TMDb Helper — full-featured movie/show metadata and playback helper"
+
+  # Add more plugins here:
+  # - name: plugin.video.example
+  #   source_repo: user/plugin.video.example
+  #   release_asset_pattern: "plugin.video.example-*.zip"
+  #   description: "Description of the plugin"

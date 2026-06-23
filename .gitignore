@@ -1,0 +1,21 @@
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+
+# OS
+.DS_Store
+thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Third-party cached downloads (optional — commit if you want them versioned)
+# Uncomment the lines below to exclude from git (CI downloads on-demand instead)
+# third-party/repos/
+# third-party/plugins/

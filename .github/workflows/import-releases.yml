@@ -1,0 +1,94 @@
+name: Import First-Party Addon Release
+
+on:
+  # Called by other repos via repository_dispatch
+  # e.g., from metadata.anime.otaku.python release workflow:
+  #   curl -X POST https://api.github.com/repos/RPDevs-Builds/kodi-addons/dispatches \
+  #     -H "Authorization: Bearer $TOKEN" \
+  #     -d '{"event_type":"addon-released","client_payload":{"addon":"metadata.anime.otaku.python","version":"v1.0.7"}}'
+  repository_dispatch:
+    types: [addon-released]
+
+  # Manual trigger for on-demand imports
+  workflow_dispatch:
+    inputs:
+      addon:
+        description: 'Submodule directory name (e.g., metadata.anime.otaku.python)'
+        required: true
+        type: string
+      version:
+        description: 'Git tag or branch to pin (e.g., v1.0.6 or main)'
+        required: false
+        default: 'main'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    name: Update Addon Submodule
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve inputs
+        run: |
+          # Support both repository_dispatch and workflow_dispatch
+          ADDON="${{ github.event.client_payload.addon || github.event.inputs.addon }}"
+          VERSION="${{ github.event.client_payload.version || github.event.inputs.version || 'main' }}"
+          echo "ADDON=$ADDON" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "[INFO] Importing addon='$ADDON' at version='$VERSION'"
+
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Validate submodule exists
+        run: |
+          SUBMODULE_PATH="repo/$ADDON"
+          if [ ! -d "$SUBMODULE_PATH" ]; then
+            echo "[ERROR] Submodule not found at $SUBMODULE_PATH"
+            echo "Available submodules:"
+            git submodule status
+            exit 1
+          fi
+          echo "SUBMODULE_PATH=$SUBMODULE_PATH" >> $GITHUB_ENV
+
+      - name: Update submodule to target version
+        run: |
+          cd "$SUBMODULE_PATH"
+          git fetch --tags origin
+          echo "[INFO] Checking out $VERSION..."
+          git checkout "$VERSION"
+          ACTUAL_REF=$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)
+          echo "[INFO] Submodule now at: $ACTUAL_REF"
+          echo "ACTUAL_REF=$ACTUAL_REF" >> $GITHUB_ENV
+
+      - name: Commit updated submodule pointer
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$SUBMODULE_PATH"
+          if git diff --staged --quiet; then
+            echo "[INFO] Submodule already at $ACTUAL_REF. No changes to commit."
+          else
+            git commit -m "chore(addons): update $ADDON to $ACTUAL_REF"
+            git push origin HEAD:main
+            echo "[INFO] Committed submodule pointer update."
+          fi
+
+      - name: Trigger repository rebuild
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'build-repo.yml',
+              ref: 'main'
+            });
+            console.log(`[INFO] Triggered build-repo.yml after importing ${process.env.ADDON} @ ${process.env.ACTUAL_REF}`);

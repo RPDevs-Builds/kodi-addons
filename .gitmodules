@@ -1,0 +1,3 @@
+[submodule "repo/metadata.anime.otaku.python"]
+	path = repo/metadata.anime.otaku.python
+	url = https://github.com/RPDevs-Builds/metadata.anime.otaku.python.git

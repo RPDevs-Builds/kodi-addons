@@ -1,0 +1,74 @@
+name: Sync Third-Party Add-ons
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Every Monday at 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (print actions, no downloads)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Download & Cache Third-Party Sources
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Run sync script
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DRY_FLAG=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            DRY_FLAG="--dry-run"
+          fi
+          python3 _sync_third_party.py $DRY_FLAG
+
+      - name: Commit new third-party downloads
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add third-party/
+          if git diff --staged --quiet; then
+            echo "[INFO] No new third-party content downloaded. Nothing to commit."
+          else
+            CHANGED=$(git diff --staged --name-only | wc -l)
+            git commit -m "chore(sync): update third-party add-ons ($CHANGED files) [skip ci]"
+            git push origin HEAD:main
+            echo "[INFO] Committed $CHANGED new third-party files."
+            # Signal the build workflow to regenerate the repo
+            echo "TRIGGER_BUILD=true" >> $GITHUB_ENV
+          fi
+
+      - name: Trigger repository rebuild
+        if: ${{ env.TRIGGER_BUILD == 'true' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'build-repo.yml',
+              ref: 'main'
+            });
+            console.log('[INFO] Triggered build-repo.yml after third-party sync.');
