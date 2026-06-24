@@ -1,3 +1,27 @@
 [submodule "repo/metadata.anime.otaku.python"]
 	path = repo/metadata.anime.otaku.python
 	url = https://github.com/RPDevs-Builds/metadata.anime.otaku.python.git
+[submodule "omega/plugin.program.autowidget"]
+	path = omega/src_autowidget
+	url = https://github.com/drinfernoo/plugin.program.autowidget
+[submodule "omega/service.subtitles.a4ksubtitles"]
+	path = omega/service.subtitles.a4ksubtitles
+	url = https://github.com/a4k-openproject/a4kSubtitles
+[submodule "omega/plugin.video.otaku"]
+	path = omega/plugin.video.otaku
+	url = https://github.com/Goldenfreddy0703/Otaku
+[submodule "omega/repository.otaku"]
+	path = omega/src_repository.otaku
+	url = https://github.com/Goldenfreddy0703/repository.otaku
+[submodule "piers/plugin.program.autowidget"]
+	path = piers/src_autowidget
+	url = https://github.com/drinfernoo/plugin.program.autowidget
+[submodule "piers/service.subtitles.a4ksubtitles"]
+	path = piers/service.subtitles.a4ksubtitles
+	url = https://github.com/a4k-openproject/a4kSubtitles
+[submodule "piers/plugin.video.otaku"]
+	path = piers/plugin.video.otaku
+	url = https://github.com/Goldenfreddy0703/Otaku
+[submodule "piers/repository.otaku"]
+	path = piers/src_repository.otaku
+	url = https://github.com/Goldenfreddy0703/repository.otaku
